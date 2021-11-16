@@ -74,18 +74,10 @@ enum tUserEventCode {
   // evenement utilisateurs
   evBP0 = 100,        //pousoir D5  (passage en mode clignotant)
   evLed0,             //Led de vie clignotante (LED_BUILTIN)
-  evLedRouge1,
-  evLedOrange1,
-  evLedVerte1,
-  evLedRouge2,
-  evLedOrange2,
-  evLedVerte2,
+  evSetFeu1,         // gestion sequence Vert Orange Rouge Feu N°1
+  evSetFeu2,         // gestion sequence Vert Orange Rouge Feu N°2
+  evFeuxClignotants,  // gestion clignotement feux 1 et 2
 
-  evStartFeu1,         // debut de sequence Vert Orange Rouge Feu N°1
-  evStartFeu2,         // debut de sequence Vert Orange Rouge Feu N°2
-
-  // evenement action
-  doReset,
 };
 
 
@@ -100,24 +92,10 @@ enum tUserEventCode {
 //#define BP0_PIN   5                //   Par defaut BP0 est sur D5
 //#define Led0_PIN  LED_BUILTIN      //   Par defaut Led0 est sur LED_BUILTIN
 //#define SERIAL_SPEED 115200        //   Default at 115200
+//#define NO_SERIAL                  //   Par defaut Serial est actif : enlevez le commentaire si vous n'en souhaitez pas (economie de memoire)
+//#define NO_DEBUG                   //   Par defaut EventDebug est actif : enlevez le commentaire si vous n'en souhaitez pas (economie de memoire)
 
 #include <BetaEvents.h>
-
-// Gestionaires de leds specifique a ce projet
-
-// Feu N°1
-evHandlerLed  ledRouge1(evLedRouge1, pinLedRouge1, ledOn);
-evHandlerLed  ledOrange1(evLedOrange1, pinLedOrange1, ledOn);
-evHandlerLed  ledVerte1(evLedVerte1, pinLedVerte1, ledOn);
-
-// Feu N°2
-evHandlerLed  ledRouge2(evLedRouge2, pinLedRouge2, ledOn);
-evHandlerLed  ledOrange2(evLedOrange2, pinLedOrange2, ledOn);
-evHandlerLed  ledVerte2(evLedVerte2, pinLedVerte2, ledOn);
-
-
-
-int  multi = 0; // nombre de clic rapide
 
 
 void setup() {
@@ -126,46 +104,77 @@ void setup() {
   // will setup Serial speed at 115200 by default
   Events.begin();
   Serial.println(F("\r\n\n" APP_NAME));
+
+  // Initialisation et les feux au rouge
+
+  // feu N°1 rouge
+  pinMode(pinLedRouge1, OUTPUT);
+  pinMode(pinLedOrange1, OUTPUT);
+  pinMode(pinLedVerte1, OUTPUT);
+  setFeuTricolor1(rouge);
+
+  // feu N°2 rouge
+  pinMode(pinLedRouge2, OUTPUT);
+  pinMode(pinLedOrange2, OUTPUT);
+  pinMode(pinLedVerte2, OUTPUT);
+  setFeuTricolor2(rouge);
+
   Serial.println("Bonjour ....");
 }
 
-byte BP0Multi = 0;  // detection de click rapide sur le poussoir
 bool sleepOk = true;
 
 void loop() {
 
   Events.get(sleepOk);  // generation du prochain evenement
   Events.handle();      // passage de l'evenement au systeme
-  if (Events.code > evLed0) {
-    D_println(Events.code);
-    D_println(Events.ext);
-  }
+  //  if (Events.code > evLed0) {
+  //    D_println(Events.code);
+  //    D_println(Events.ext);
+  //  }
   switch (Events.code)  // gestion de l'evenement
   {
     case evInit: {
         Serial.println("Init");
-        setFeuTricolor1(vert);
-        setFeuTricolor2(rouge);
+        Events.push(evSetFeu1, vert); // Debut de sequence Vert Orange Rouge Feu n° 1
       }
       break;
 
-    //    case evLedVerte1: {
-    //        if (Events.ext == evxLedOff) {
-    //          setFeuTricolor1(orange);
-    //        }
-    //      }
-    //      break;
-    //
-    //    case evLedOrange1: {
-    //        if (Events.ext == evxLedOff) {
-    //          setFeuTricolor1(rouge);
-    //          Events.delayedPush(delaiSecurite, evStartFeu1);
-    //        }
-    //      }
-    //      break;
-    //
+    // Gestion sequence Vert Orange Rouge Feu n° 1
+    case evSetFeu1: {
+        tCouleur couleur = (tCouleur)Events.ext;
+        setFeuTricolor1(couleur);
+        switch (couleur) {
+          case vert: Events.delayedPush(delaiFeuVert, evSetFeu1, orange); break;
+          case orange: Events.delayedPush(delaiFeuOrange, evSetFeu1, rouge); break;
+          case rouge: Events.delayedPush(delaiSecurite, evSetFeu2, vert); break;
+        }
+      }
+      break;
 
+    // Gestion sequence Vert Orange Rouge Feu n° 1
+    case evSetFeu2: {
+        tCouleur couleur = (tCouleur)Events.ext;
+        setFeuTricolor2(couleur);
+        switch (couleur) {
+          case vert: Events.delayedPush(delaiFeuVert, evSetFeu2, orange); break;
+          case orange: Events.delayedPush(delaiFeuOrange, evSetFeu2, rouge); break;
+          case rouge: Events.delayedPush(delaiSecurite, evSetFeu1, vert); break;
+        }
+      }
+      break;
 
+     // Gestion Clignotement
+    case evFeuxClignotants: {
+        tCouleur couleur = (tCouleur)Events.ext;
+        setFeuTricolor1(couleur);
+        setFeuTricolor2(couleur);
+        switch (couleur) {
+          case off: Events.delayedPush(delaiClignotant, evFeuxClignotants, orange); break;
+          case orange: Events.delayedPush(delaiClignotant, evFeuxClignotants, off); break;
+        }
+      }
+      break;
 
 
 
@@ -175,50 +184,30 @@ void loop() {
       switch (Events.ext) {
         case evxBPDown:                           // push button 0 went down
           Led0.setMillisec(500, 50);              // set led fast blink
-          BP0Multi++;                             // count multi push
           Serial.println(F("BP0 Down"));          // warn user on console
-          if (BP0Multi > 1) {                     // if more than 1 multi push
-            Serial.print(F("BP0 Multi ="));       //   warn user
-            Serial.println(BP0Multi);
-          }
+          // Feu en orange clignotant
+          Events.removeDelayEvent(evSetFeu1);
+          Events.removeDelayEvent(evSetFeu2);
+          Events.push(evFeuxClignotants, orange); break;
           break;
 
         case evxBPUp:                             // push button 0 went up
           Led0.setMillisec(1000, 10);             // set led slow blink
           Serial.println(F("BP0 Up"));            // warn user
+          Events.removeDelayEvent(evFeuxClignotants);
+          setFeuTricolor1(rouge);
+          setFeuTricolor2(rouge);
+          Events.delayedPush(delaiSecurite,evSetFeu1, vert); break;
           break;
 
-        case evxBPLongDown:                       // push button is down for a long time (1.5 sec)
-
-          // if you click fast 5 times then hold down button a reset will be done
-          if (BP0Multi == 5) {                    // if multi is 5
-            Serial.println(F("RESET"));           //   do a reset
-            Events.push(doReset);
-          }
-
-          Serial.println(F("BP0 Long Down"));     // warn user
-          break;
-
-        case evxBPLongUp:                         // push button is up for a long time (1.5 sec)
-          BP0Multi = 0;                           // raz multi who count number of fast click
-          Serial.println(F("BP0 Long Up"));       // warn user
-          break;
 
       }
-      break;
-
-    case doReset:
-      helperReset();
       break;
 
 
     case evInString:
       if (Debug.trackTime < 2) {
         D_println(Keyboard.inputString);
-      }
-      if (Keyboard.inputString.equals("RESET")) {
-        Serial.println(F("RESET"));
-        Events.push(doReset);
       }
       if (Keyboard.inputString.equals("S")) {
         //            if (Events.aStringPtr->equals("S")) {
@@ -233,19 +222,17 @@ void loop() {
 }
 
 // gestion du feu N° 1
-// ajuste toutes les leds du feu n°1 suivant la couleur choisie pour la durée adaptée
-// le rouge reste indefiniment il sera eteint par un debut de cycle (evStartFeu1)
+// ajuste toutes les leds du feu n°1 suivant la couleur choisie
 void setFeuTricolor1(tCouleur couleur) {
-  D_println(couleur + (0 * 1));
-  if (couleur == vert) ledVerte1.pulse(delaiFeuVert); else ledVerte1.setOn(false);
-  if (couleur == orange) ledOrange1.pulse(delaiFeuOrange); else ledOrange1.setOn(false);
-  ledRouge1.setOn( couleur == rouge);
+  digitalWrite(pinLedVerte1,  (couleur == vert)   ? ledOn : ledOff);
+  digitalWrite(pinLedOrange1, (couleur == orange) ? ledOn : ledOff);
+  digitalWrite(pinLedRouge1,  (couleur == rouge)  ? ledOn : ledOff);
 }
 
+// gestion du feu N° 2
+// ajuste toutes les leds du feu n°2 suivant la couleur choisie
 void setFeuTricolor2(tCouleur couleur) {
-
-  D_println(couleur + (0 * 2));
-  if (couleur == vert) ledVerte2.pulse(delaiFeuVert); else ledVerte2.setOn(false);
-  if (couleur == orange) ledOrange2.pulse(delaiFeuOrange); else ledOrange2.setOn(false);
-  ledRouge2.setOn( couleur == rouge);
+  digitalWrite(pinLedVerte2,  (couleur == vert)   ? ledOn : ledOff);
+  digitalWrite(pinLedOrange2, (couleur == orange) ? ledOn : ledOff);
+  digitalWrite(pinLedRouge2,  (couleur == rouge)  ? ledOn : ledOff);
 }
