@@ -94,7 +94,7 @@ enum tUserEventCode {
 //#define SERIAL_SPEED 115200        //   Default at 115200
 //#define NO_SERIAL                  //   Par defaut Serial est actif : enlevez le commentaire si vous n'en souhaitez pas (economie de memoire)
 //#define NO_DEBUG                   //   Par defaut EventDebug est actif : enlevez le commentaire si vous n'en souhaitez pas (economie de memoire)
-
+#define DEFAULT_PIN 
 #include <BetaEvents.h>
 
 
@@ -152,7 +152,7 @@ void loop() {
       }
       break;
 
-    // Gestion sequence Vert Orange Rouge Feu n° 1
+    // Gestion sequence Vert Orange Rouge Feu n° 2
     case evSetFeu2: {
         tCouleur couleur = (tCouleur)Events.ext;
         setFeuTricolor2(couleur);
@@ -200,7 +200,14 @@ void loop() {
           Events.delayedPush(delaiSecurite,evSetFeu1, vert); break;
           break;
 
+         case evxBPLongDown: 
+           Serial.println(F("BP0 long Down"));
+           break;
 
+         case evxBPLongUp: 
+           Serial.println(F("BP0 long Up"));
+           break;
+           
       }
       break;
 
@@ -215,6 +222,16 @@ void loop() {
         sleepOk = !sleepOk;
         D_println(sleepOk);
       }
+
+
+      if (Keyboard.inputString.equals("D")) {
+        //Serial.println("Delais");
+        delay(3);
+        Serial.print("D");
+      }
+
+
+
 
       break;
 
